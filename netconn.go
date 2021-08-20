@@ -10,28 +10,36 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var _ net.Conn = (*NetConn)(nil)
+
 var (
+	// ErrUnexpectedMsgType is returned when a reader is returned by the websocket
+	// connection that does not match the message type NetConn was created with
 	ErrUnexpectedMsgType = errors.New("unexpected message type")
 )
 
-type netConn struct {
+type NetConn struct {
 	wsConn  *websocket.Conn
 	msgType int
 
 	reader io.Reader
 }
 
-func NewNetConn(wsConn *websocket.Conn, msgType int) *netConn {
-	return &netConn{wsConn, msgType, nil}
+// NewNetConn returns a NetConn pointer. It takes a gorilla websocket
+// connection and a message type. See: https://github.com/gorilla/websocket/blob/v1.4.2/conn.go#L62
+// for possible values
+func NewNetConn(wsConn *websocket.Conn, msgType int) *NetConn {
+	return &NetConn{wsConn, msgType, nil}
 }
 
-func (c *netConn) Read(b []byte) (int, error) {
+func (c *NetConn) Read(b []byte) (int, error) {
 	if c.reader == nil {
 		msgType, reader, err := c.wsConn.NextReader()
 		if err != nil {
 			return 0, fmt.Errorf("next reader: %w", err)
 		}
 
+		// err if we receive an unsupported message type
 		if msgType != c.msgType {
 			return 0, ErrUnexpectedMsgType
 		}
@@ -51,7 +59,7 @@ func (c *netConn) Read(b []byte) (int, error) {
 	return bytesRead, err
 }
 
-func (c *netConn) Write(b []byte) (int, error) {
+func (c *NetConn) Write(b []byte) (int, error) {
 	nextWriter, err := c.wsConn.NextWriter(c.msgType)
 	if err != nil {
 		return 0, fmt.Errorf("next writer: %w", err)
@@ -65,19 +73,19 @@ func (c *netConn) Write(b []byte) (int, error) {
 	return bytesWritten, nextWriter.Close()
 }
 
-func (c *netConn) Close() error {
+func (c *NetConn) Close() error {
 	return c.wsConn.Close()
 }
 
-func (c *netConn) LocalAddr() net.Addr {
+func (c *NetConn) LocalAddr() net.Addr {
 	return c.wsConn.LocalAddr()
 }
 
-func (c *netConn) RemoteAddr() net.Addr {
+func (c *NetConn) RemoteAddr() net.Addr {
 	return c.wsConn.RemoteAddr()
 }
 
-func (c *netConn) SetDeadline(t time.Time) error {
+func (c *NetConn) SetDeadline(t time.Time) error {
 	if err := c.SetReadDeadline(t); err != nil {
 		return fmt.Errorf("set read deadline: %w", err)
 	}
@@ -85,10 +93,10 @@ func (c *netConn) SetDeadline(t time.Time) error {
 	return c.SetWriteDeadline(t)
 }
 
-func (c *netConn) SetReadDeadline(t time.Time) error {
+func (c *NetConn) SetReadDeadline(t time.Time) error {
 	return c.wsConn.SetReadDeadline(t)
 }
 
-func (c *netConn) SetWriteDeadline(t time.Time) error {
+func (c *NetConn) SetWriteDeadline(t time.Time) error {
 	return c.wsConn.SetWriteDeadline(t)
 }
